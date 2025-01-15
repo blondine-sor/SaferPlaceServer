@@ -1,11 +1,14 @@
-from fastapi import FastAPI,File,UploadFile,Form
+from fastapi import Depends, FastAPI,File, HTTPException,UploadFile,Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 import snowflake.connector as sc
 import uvicorn
 from dotenv import load_dotenv
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 import os
 import sys
-from models import User,E_Contacts
+from models import User,E_Contacts,UserLogin
 from functions import password_hash,password_verify
 
 
@@ -31,6 +34,59 @@ conn = sc.connect(
 )
 # Create a cursor object
 cur = conn.cursor()
+
+#JWT configuration
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# OAuth2 password flow
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# create access token
+def create_access_token(data: dict, expires_delta: timedelta = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+#request to get user
+def get_user(email: str, password: str):
+    # verify if the user exists
+    cur.execute(f"SELECT PASSWORD FROM SAFERPLACES.USERS.USER WHERE EMAIL='{email}'")
+    password_db = cur.fetchone()
+    if password_db and password_verify(password, password_db[0]):
+        cur.execute(f"SELECT * FROM SAFERPLACES.USERS.USER WHERE EMAIL='{email}'")
+    user = cur.fetchone()
+    return user
+
+# Dependency to get current user
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=401, detail="Could not validate credentials"
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = get_user(email=email)
+    if user is None:
+        raise credentials_exception
+    return
+
+
+
+
+
+
+
 
 #request to add a user
 
@@ -59,6 +115,22 @@ async def add_emergency_contact(e_contact: E_Contacts):
         cur.execute("commit")
         return {"status": "contact added"}
 
+#request for user login
+@app.post("/login")
+# function returns token user information token type and token expiration
+async def login(user: UserLogin):
+    user_db = get_user(user.email, user.password)
+    if user_db:
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user_db[1]}, expires_delta=access_token_expires
+        )
+        return {"access_token": access_token, "user":user_db, "token_type": "bearer", "expires": access_token_expires}
+    else:
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
+     
+     
+     
 
 
 

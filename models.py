@@ -13,4 +13,7 @@ class E_Contacts(BaseModel):
     name: str
     phone: str
     niveau: str
-    
+
+class UserLogin(BaseModel):
+    email: str
+    password: str   
