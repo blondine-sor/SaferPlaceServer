@@ -125,14 +125,25 @@ async def login(user: UserLogin):
         access_token = create_access_token(
             data={"sub": user_db[1]}, expires_delta=access_token_expires
         )
-        return {"access_token": access_token, "user":user_db, "token_type": "bearer", "expires": access_token_expires}
+        user_info = {
+            "id": user_db[0],
+            "name": user_db[1],
+            "email": user_db[2],
+            "phone": user_db[4],
+            "authorization": user_db[5],
+            "is_active": True
+        }
+        return {"access_token": access_token, "user":user_info, "token_type": "bearer", "expires": access_token_expires}
     else:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
      
      
      
 
-
+#creating a protected route
+@app.get("/users/me")
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 
