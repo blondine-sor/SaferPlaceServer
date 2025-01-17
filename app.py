@@ -8,7 +8,7 @@ from jose import JWTError, jwt
 from datetime import datetime, timedelta
 import os
 import sys
-from models import User,E_Contacts,UserLogin
+from models import User,E_Contacts,UserLogin,Contacts
 from functions import password_hash,password_verify
 
 
@@ -81,6 +81,31 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
     return
 
+# Retrieves all contacts
+async def get_contacts(user_id: int):
+    cur.execute(f"SELECT * FROM SAFERPLACES.USERS.E_CONTACTS WHERE USER_ID='{user_id}'")
+    contacts = cur.fetchall()
+
+    if contacts:
+        
+        contactsInfo = [
+            {
+                "id": contact[0],
+                "user_id": contact[1],
+                "name": contact[2],
+                "phone": contact[3],
+                "niveau": contact[4]
+            }
+            for contact in contacts
+        ] 
+        
+
+        return contactsInfo
+    else:
+        return "No contacts found"
+
+    
+   
 
 
 
@@ -133,7 +158,9 @@ async def login(user: UserLogin):
             "authorization": user_db[5],
             "is_active": True
         }
-        return {"access_token": access_token, "user":user_info, "token_type": "bearer", "expires": access_token_expires}
+        contacts = await get_contacts(user_db[0])
+        print(contacts)
+        return {"access_token": access_token, "user":user_info, "token_type": "bearer", "expires": access_token_expires, "contacts": contacts}
     else:
         raise HTTPException(status_code=400, detail="Incorrect email or password")
      
@@ -145,7 +172,19 @@ async def login(user: UserLogin):
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
+# modifying authorization
+@app.put("/users/me/authorization")
+async def modify_authorization(user_id: int, authorization: str):
+    cur.execute(f"UPDATE SAFERPLACES.USERS.USER SET AUTHORIZATION='{authorization}' WHERE ID='{user_id}'")
+    cur.execute("commit")
+    return {"status": "authorization modified"}
 
+# deleting a contact
+@app.delete("/users/me/contacts")
+async def delete_contact(user_id: int, contact_id: int):
+    cur.execute(f"DELETE FROM SAFERPLACES.USERS.E_CONTACTS WHERE USER_ID='{user_id}' AND ID_CONTACT='{contact_id}'")
+    cur.execute("commit")
+    return {"status": "contact deleted"}
 
 
 

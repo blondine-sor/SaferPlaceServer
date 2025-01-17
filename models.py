@@ -17,3 +17,7 @@ class E_Contacts(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str   
+
+class Contacts(BaseModel):
+    user_id: int
+    
